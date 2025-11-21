@@ -1,111 +1,127 @@
-KỊCH BẢN THUYẾT TRÌNH: SECURE PASSWORD STORAGE
-PHẦN 1: Đặt vấn đề & Lý thuyết (2-3 phút)
-(Slide/Màn hình: Chỉ hiển thị tiêu đề dự án)
+KỊCH BẢN DEMO: SECURE PASSWORD STORAGE
 
-Lời nói:
- "Thưa thầy và các bạn. Trong bảo mật web, nguyên tắc vàng là: 'Không bao giờ tin tưởng đầu vào của người dùng và không bao giờ lưu mật khẩu dưới dạng văn bản thuần (plaintext)'.
+1. Mở đầu: Giới thiệu Kiến trúc (1 phút)
+(Thao tác: Mở VS Code, show cấu trúc thư mục server/)
 
-Tuy nhiên, chỉ băm (hashing) mật khẩu thôi là chưa đủ. Rất nhiều hệ thống cũ vẫn dùng MD5 hoặc SHA1. Hôm nay, nhóm em sẽ chứng minh tại sao các thuật toán cũ lại 'chết' và tại sao Argon2 lại là vua của các thuật toán băm hiện nay, thông qua một mô hình thực nghiệm Fullstack."
+Lời nói: "Thưa thầy, thay vì viết code gộp, em đã xây dựng dự án theo mô hình MVC (Model-View-Controller) chuẩn công nghiệp và sử dụng MongoDB thật để lưu trữ dữ liệu.
 
-PHẦN 2: Phân tích Code - "Show code" thông minh (5-7 phút)
-Đây là phần bạn mở VS Code lên. Đừng chỉ cuộn chuột, hãy mở file server/server.js và highlight vào từng đoạn code sau để giải thích.
+Model (User.js): Định nghĩa cấu trúc User lưu trữ đồng thời 3 loại hash: MD5, Bcrypt và Argon2 để tiện so sánh.
 
-2.1. Phân tích sai lầm của MD5/SHA1
-(Thao tác: Bôi đen đoạn code xử lý MD5 trong server.js)
+Controller (hashController.js): Nơi chứa toàn bộ logic xử lý thuật toán và giả lập tấn công mà em sẽ demo ngay sau đây."
 
-JavaScript
----------------------------------------------------------------------
-// 1. MD5 (Cực nhanh - Kém an toàn)
-const startMD5 = process.hrtime();
+
+Shutterstock
+2. Phần 1: Benchmark - Sự chênh lệch tốc độ (3 phút)
+(Thao tác: Mở Web -> Nhập 123456 -> Bấm "Chạy & Lưu DB") (Thao tác: Khi biểu đồ hiện ra, chỉ chuột vào từng cột)
+
+Lời nói: "Đầu tiên, em thực hiện Benchmark quá trình tạo mật khẩu (Hashing).
+
+Thầy có thể thấy MD5 (cột đỏ) có thời gian xử lý cực thấp (~0.005ms).
+
+Trong khi đó, Argon2 (cột xanh) mất khoảng 300ms - 400ms để tạo ra một mã băm."
+
+(Thao tác: Mở Code hashController.js - Hàm benchmark)
+
+
+// server/controllers/hashController.js
+----------------------------------------------------------------------------------
+// MD5: Dùng process.hrtime (đo nano giây) vì nó quá nhanh
+let start = process.hrtime();
 const md5Hash = crypto.createHash('md5').update(password).digest('hex');
-const endMD5 = process.hrtime(startMD5);
----------------------------------------------------------------------
+// ... Kết quả ra ngay lập tức
 
-Giải thích: "Đầu tiên, hãy nhìn vào đoạn code xử lý MD5. Em sử dụng thư viện crypto có sẵn của Node.js.
-
-Vấn đề: MD5 được thiết kế cho tốc độ. Nó hoạt động dựa trên các phép toán bitwise cực nhanh trên CPU.
-
-Tại sao em dùng process.hrtime()?: Vì MD5 nhanh đến mức nếu dùng Date.now() (đơn vị mili-giây) thì kết quả sẽ trả về 0. Em buộc phải dùng hrtime để đo nano-giây.
-
-Hậu quả: Một Hacker dùng GPU RTX 4090 có thể thử 200 tỷ chuỗi MD5 mỗi giây. Nếu database lộ, toàn bộ mật khẩu user sẽ bị giải mã trong tích tắc."
-
-2.2. Giải pháp tiêu chuẩn: Bcrypt
-(Thao tác: Bôi đen đoạn code Bcrypt)
-
-JavaScript
------------------------------------------------------------------------------------
-// 3. Bcrypt (An toàn - Cost 12)
-const bcryptHash = await bcrypt.hash(password, 12); 
------------------------------------------------------------------------------------
-
-Giải thích: "Để chống lại tốc độ của GPU, chúng ta cần Work Factor (Hệ số công việc).
-
-Ở đây em dùng bcrypt với saltRounds = 12.
-
-Con số 12 này không phải tuyến tính, mà là hàm mũ (2^12). Nghĩa là mỗi lần tăng 1 đơn vị, thời gian băm sẽ lâu gấp đôi.
-
-Cơ chế: Bcrypt tự động sinh ra một chuỗi Salt ngẫu nhiên và gộp vào password trước khi băm. Điều này triệt tiêu hoàn toàn kỹ thuật tấn công bằng Rainbow Table (Bảng cầu vồng - bảng tra cứu mã băm có sẵn)."
-
-2.3. Giải pháp tối thượng: Argon2 (Điểm nhấn ăn điểm)
-(Thao tác: Bôi đen đoạn code Argon2 - Đây là phần quan trọng nhất)
-
-JavaScript
------------------------------------------------------------------------------------
-// 4. Argon2 (Memory Hardness)
-const argonHash = await argon2.hash(password, {
-    type: argon2.argon2id, 
-    memoryCost: 2 ** 16,   // 64 MB RAM
-    timeCost: 3,           // 3 vòng lặp
-    parallelism: 1
+// Argon2: Cấu hình Memory Hardness
+const argon2Hash = await argon2.hash(password, { 
+    type: argon2.argon2id, // Chống Side-channel attack
+    memoryCost: 2**16,     // Yêu cầu 64MB RAM cho mỗi lần băm
+    timeCost: 3,           // Bắt buộc CPU chạy 3 vòng lặp
+    parallelism: 1 
 });
 ----------------------------------------------------------------------------------
 
-Giải thích: "Đây là phần quan trọng nhất của bài báo cáo. Tại sao Bcrypt vẫn chưa đủ? Vì hacker đã chế tạo ra phần cứng chuyên dụng (ASIC/FPGA) để crack Bcrypt.
 
-Argon2 (người chiến thắng cuộc thi PHC 2015) đưa ra khái niệm Memory Hardness.
+Giải thích Code: "Ở đây, sự khác biệt nằm ở cấu hình memoryCost: 2**16 của Argon2. Em bắt buộc Server phải cấp phát 64MB RAM để tính toán xong 1 mật khẩu.
 
-type: argon2id: Đây là chế độ lai, giúp chống lại cả tấn công GPU và tấn công kênh kề (Side-channel attack).
+Điều này làm MD5 rất nhanh (tốt cho checksum file nhưng tệ cho mật khẩu) và Argon2 rất chậm (tốt cho bảo mật). Em đã lưu các hash này vào MongoDB để dùng cho bước tiếp theo."
 
-memoryCost: 2 ** 16: Dòng code này ép server phải cấp phát 64MB RAM cho mỗi lần băm.
+3. Phần 2: Giả lập Tấn công Brute-force (Phần quan trọng nhất - 5 phút)
+(Thao tác: Chuyển xuống phần "3. Mô phỏng Tấn công")
 
-Tại sao hacker sợ cái này?: GPU của hacker có hàng ngàn nhân tính toán nhưng bộ nhớ RAM lại rất bé. Việc bắt buộc dùng nhiều RAM khiến hacker không thể chạy song song hàng nghìn tác vụ trên GPU được nữa. Đây chính là chốt chặn an toàn nhất hiện nay."
+Lời nói: "Thưa thầy, để chứng minh độ an toàn thực tế, em đã viết một module Attack Simulation. Kịch bản ở đây là: Hacker có danh sách 100 mật khẩu phổ biến và hắn thử liên tục vào hệ thống để dò tìm mật khẩu đúng."
 
-PHẦN 3: Demo thực tế & Đọc biểu đồ (3-4 phút)
-(Thao tác: Mở trình duyệt, nhập pass SuperSecretPassword, bấm chạy)
+3.1. Demo tấn công MD5
+(Thao tác: Bấm nút "Tấn công MD5" -> Kết quả hiện ra ngay lập tức)
 
-Lời nói: "Bây giờ em sẽ thực hiện tấn công thử nghiệm trên môi trường giả lập.
+Phân tích: "Thầy thấy đó, Server giải mã 100 mật khẩu trong tích tắc (khoảng 5ms - 10ms). Tức là 1 giây, Hacker có thể thử hàng chục nghìn, thậm chí hàng triệu mật khẩu. Nếu Database MD5 bị lộ, coi như mất trắng."
 
-Khi em bấm nút, Request được gửi về Node.js server. Server sẽ thực hiện băm song song 4 thuật toán."
+3.2. Demo tấn công Argon2
+(Thao tác: Bấm nút "Tấn công Argon2" -> Web sẽ hiển thị "Đang thực hiện...")
 
-(Thao tác: Chỉ chuột vào biểu đồ khi kết quả hiện ra)
+Lời nói: "Bây giờ em tấn công vào Argon2. Thầy sẽ thấy hệ thống phải chờ rất lâu..." (Chờ khoảng 30-40 giây) "... Server đang phải gồng mình xử lý từng mật khẩu một."
 
-Phân tích kết quả:
+(Thao tác: Khi kết quả hiện ra)
 
-Cột MD5/SHA1 (Màu đỏ): Thầy có thể thấy nó gần như vô hình trên biểu đồ. Thời gian xử lý ~0.005ms. Tốc độ này là "miếng mồi ngon" cho Hacker.
+Phân tích: "Kết quả: Để thử 100 mật khẩu, Argon2 mất tới 30.000ms (30 giây). Trung bình 300ms/mật khẩu. Sự chậm trễ này là ác mộng với Hacker."
 
-Cột Argon2 (Màu xanh): Thời gian vọt lên khoảng 200-300ms.
+3.3. Giải thích Code Tấn công (Quan trọng)
+(Thao tác: Mở code hashController.js - Hàm attack)
 
-Đối với trải nghiệm người dùng: 300ms là hoàn toàn chấp nhận được (chưa đến nửa cái chớp mắt).
+JavaScript
 
-Đối với Hacker: Việc chậm hơn MD5 hàng triệu lần cộng với việc tốn RAM, khiến chi phí để crack 1 password tốn kém hơn giá trị của dữ liệu lấy được. => Hệ thống an toàn.
+// server/controllers/hashController.js - Hàm attack
+---------------------------------------------------------------------------------
+exports.attack = async (req, res) => {
+    // 1. Tạo danh sách 100 mật khẩu giả để tấn công
+    const attackList = Array.from({length: 100}, (_, i) => `wrong_pass_${i}`);
+    
+    let start = Date.now();
+    
+    // 2. Vòng lặp tấn công (Brute-force Loop)
+    for (const pass of attackList) {
+        if (algo === 'MD5') {
+            // MD5: Chỉ cần so sánh chuỗi hash (Cực nhanh)
+            const h = crypto.createHash('md5').update(pass).digest('hex');
+            if (h === user.md5Hash) break; 
+        } 
+        else if (algo === 'Argon2') {
+            // Argon2: Phải chạy hàm verify tốn tài nguyên (Cực lâu)
+            try { 
+                // Hàm này tốn 300ms và 64MB RAM mỗi lần gọi
+                await argon2.verify(user.argon2Hash, pass); 
+            } catch(e){}
+        }
+    }
+    // ... Trả về tổng thời gian
+};
+---------------------------------------------------------------------------------
 
-PHẦN 4: Câu hỏi mở rộng (Chuẩn bị sẵn để trả lời vấn đáp)
-Nếu thầy hỏi, bạn hãy dùng những kiến thức này "phản đòn" để lấy điểm cộng:
 
-Câu hỏi 1: Tại sao không để Salt Round (hoặc Cost) cao hơn nữa, ví dụ 20?
+Giải thích sâu với thầy: "Thưa thầy, bí mật nằm ở vòng lặp for này:
 
-Trả lời: "Thưa thầy, bảo mật là sự đánh đổi với hiệu năng (Trade-off). Nếu để Cost quá cao, CPU server sẽ bị quá tải khi có nhiều người đăng nhập cùng lúc (DOS attack). Mức 12 cho Bcrypt hoặc 64MB cho Argon2 là điểm cân bằng tốt nhất hiện nay cho phần cứng thông thường."
+Với MD5: Phép so sánh chuỗi h === user.md5Hash chỉ tốn vài nano-giây. CPU thực hiện việc này nhẹ như lông hồng.
 
-Câu hỏi 2: Tại sao không dùng mã hóa 2 chiều (AES) để lưu password?
+Với Argon2: Hàm argon2.verify() không chỉ so sánh chuỗi. Nó phải thực hiện lại quy trình băm (Re-hashing) với cùng Salt và Cost (64MB RAM).
 
-Trả lời: "Nếu dùng AES, chúng ta phải lưu trữ Key giải mã. Nếu Hacker hack được server và lấy được Key, hắn sẽ giải mã được toàn bộ password. Hàm băm (Hashing) là một chiều, không thể dịch ngược lại, nên dù mất dữ liệu, hacker cũng không biết password gốc là gì."
+Toán học chứng minh:
 
-Câu hỏi 3: Bao lâu thì Argon2 lỗi thời?
+MD5: 0.001 giây / 100 pass. => Hacker thử 1 tỷ pass mất ~10 giây.
 
-Trả lời: "Argon2 được thiết kế để 'future-proof' (bền vững với tương lai). Khi máy tính mạnh lên, ta chỉ cần tăng tham số timeCost và memoryCost trong config lên là xong, không cần viết lại thuật toán."
+Argon2: 30 giây / 100 pass. => Hacker thử 1 tỷ pass mất ~10 năm.
 
-PHẦN 5: Kết luận
-"Qua phần trình bày và demo code, nhóm em kết luận rằng: Trong năm 2024-2025, việc sử dụng MD5/SHA1 cho mật khẩu là một lỗi bảo mật nghiêm trọng. Các nhà phát triển web bắt buộc phải chuyển sang Bcrypt hoặc tốt nhất là Argon2 để đảm bảo an toàn cho người dùng."
+=> Đây chính là lý do Argon2 id được gọi là Memory Hard Function (Hàm yêu cầu bộ nhớ), khắc tinh của GPU/ASIC Crack."
 
-Mẹo nhỏ để trình bày ngầu hơn:
-Mở Developer Tools (F12) trên trình duyệt: Tab Network. Khi bấm nút "Chạy Demo", hãy cho thầy thấy request gửi đi và response JSON trả về. Điều này chứng minh bạn hiểu rõ luồng đi của dữ liệu.
+4. Kết luận
+(Thao tác: Quay lại màn hình chính)
+
+Lời nói: "Tổng kết lại, Demo của em chứng minh rằng:
+
+Không nên dùng các hàm băm nhanh (MD5/SHA1) cho mật khẩu.
+
+Phải dùng các thuật toán có Work Factor (Hệ số công việc) như Bcrypt hoặc Argon2.
+
+Việc làm chậm Server 300ms là sự đánh đổi xứng đáng để bảo vệ người dùng trước các cuộc tấn công Brute-force hàng loạt."
+
+Mẹo nhỏ khi trình bày:
+Khi chạy Argon2 attack, khoảng thời gian chờ 30 giây rất dễ bị "chết" không khí (awkward silence). Hãy tranh thủ lúc đó để nói về cấu hình RAM: "Trong lúc chờ đợi, em xin giải thích là máy em đang bị chiếm dụng RAM khá nhiều vì Argon2 yêu cầu bộ nhớ..."
+
+Hãy mở Task Manager lên nếu có thể, cho thầy thấy CPU/RAM nhích lên khi chạy Argon2 (nếu máy bạn đủ nhạy). Điều này cực kỳ thuyết phục.
