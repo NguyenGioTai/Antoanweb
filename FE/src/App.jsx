@@ -1,89 +1,130 @@
-import { useState } from 'react';
-import axios from 'axios';
-import BenchmarkSection from './components/BenchmarkSection';
-import ResultTable from './components/ResultTable';
-import AttackSection from './components/AttackSection';
-import { Chart as ChartJS, CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend } from 'chart.js';
-import { Bar } from 'react-chartjs-2';
-import './App.css'; // File CSS cũ của bạn
+import { ThemeProvider } from "styled-components";
+import { GlobalStyles } from "./styles/GlobalStyles";
+import { theme } from "./styles/theme";
+import { useStore } from "./store";
+import styled from "styled-components";
 
-ChartJS.register(CategoryScale, LinearScale, BarElement, Title, Tooltip, Legend);
+import BenchmarkSection from "./components/BenchmarkSection";
+import ResultTable from "./components/ResultTable";
+import AttackSection from "./components/AttackSection";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from "chart.js";
+import { Bar } from "react-chartjs-2";
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
+
+const Container = styled.div`
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: ${({ theme }) => theme.spacing.xl};
+`;
+
+const Header = styled.header`
+  text-align: center;
+  margin-bottom: ${({ theme }) => theme.spacing.xxl};
+
+  h1 {
+    font-size: 3rem;
+    font-weight: 700;
+    color: ${({ theme }) => theme.colors.primary};
+  }
+
+  p {
+    font-size: 1.2rem;
+    color: ${({ theme }) => theme.colors.textSecondary};
+  }
+`;
+
+const Card = styled.div`
+  background: ${({ theme }) => theme.colors.cardBackground};
+  border-radius: ${({ theme }) => theme.borderRadius};
+  padding: ${({ theme }) => theme.spacing.xl};
+  box-shadow: ${({ theme }) => theme.shadows.md};
+  margin-bottom: ${({ theme }) => theme.spacing.xl};
+`;
 
 function App() {
-  const [password, setPassword] = useState('Admin@123');
-  const [data, setData] = useState([]);
-  const [loading, setLoading] = useState(false);
+  const {
+    password,
+    data,
+    loading,
+    attacking,
+    attackResult,
+    setPassword,
+    handleBenchmark,
+    handleAttack,
+  } = useStore();
 
-  // Attack State
-  const [attackResult, setAttackResult] = useState(null);
-  const [attacking, setAttacking] = useState(false);
-
-  const handleBenchmark = async () => {
-    if (!password) return alert("Nhập pass!");
-    setLoading(true);
-    try {
-      const res = await axios.post('http://localhost:3000/api/benchmark', { password });
-      setData(res.data);
-    } catch (e) { alert("Lỗi Server!"); }
-    finally { setLoading(false); }
-  };
-
-  const handleAttack = async (algo) => {
-    setAttacking(true);
-    setAttackResult(null);
-    try {
-      // Lưu ý: Argon2 100 lần sẽ mất khoảng 30-40 giây
-      const res = await axios.post('http://localhost:3000/api/attack', { algo });
-      setAttackResult(res.data);
-    } catch (e) { alert("Lỗi Attack!"); }
-    finally { setAttacking(false); }
-  };
-
-  // Chart Data
   const chartData = {
-    labels: data.map(d => d.algo),
-    datasets: [{
-      label: 'Thời gian (ms)',
-      data: data.map(d => d.time),
-      backgroundColor: ['#e74c3c', '#e67e22', '#1abc9c', '#3498db']
-    }]
+    labels: data.map((d) => d.algo),
+    datasets: [
+      {
+        label: "Thời gian (ms)",
+        data: data.map((d) => d.time),
+        backgroundColor: [
+          theme.colors.danger,
+          theme.colors.warning,
+          theme.colors.success,
+          theme.colors.primary,
+        ],
+      },
+    ],
   };
 
   return (
-    <div className="container">
-      <div className="header">
-        <h1>Professional Secure Storage Demo</h1>
-        <p>Mô hình MVC - MongoDB - Attack Simulation (100x)</p>
-      </div>
+    <ThemeProvider theme={theme}>
+      <GlobalStyles />
+      <Container>
+        <Header>
+          <h1>Professional Secure Storage Demo</h1>
+          <p>Mô hình MVC - MongoDB - Attack Simulation (100x)</p>
+        </Header>
 
-      <BenchmarkSection
-        password={password}
-        setPassword={setPassword}
-        handleBenchmark={handleBenchmark}
-        loading={loading}
-      />
+        <BenchmarkSection
+          password={password}
+          setPassword={setPassword}
+          handleBenchmark={() => handleBenchmark(password)}
+          loading={loading || attacking}
+        />
 
-      {data.length > 0 && (
-        <>
-          <div className="card">
-            <h3>2. Biểu đồ hiệu năng</h3>
-            <div className="chart-container" style={{ height: '300px' }}>
-              <Bar data={chartData} options={{ maintainAspectRatio: false }} />
-            </div>
-          </div>
+        {data.length > 0 && (
+          <>
+            <Card>
+              <h3>2. Biểu đồ hiệu năng</h3>
+              <div style={{ height: "300px" }}>
+                <Bar
+                  data={chartData}
+                  options={{ maintainAspectRatio: false }}
+                />
+              </div>
+            </Card>
 
-          <ResultTable data={data} />
+            <ResultTable data={data} />
 
-          <AttackSection
-            handleAttack={handleAttack}
-            attackResult={attackResult}
-            attacking={attacking}
-          />
-
-
-        </>
-      )}
-    </div>
+            <AttackSection
+              handleAttack={handleAttack}
+              attackResult={attackResult}
+              attacking={attacking}
+            />
+          </>
+        )}
+      </Container>
+    </ThemeProvider>
   );
 }
 

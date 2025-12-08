@@ -1,7 +1,7 @@
-KỊCH BẢN DEMO: SECURE PASSWORD STORAGE
+KỊCH BẢN DEMO: LƯU TRỮ MẬT KHẨU AN TOÀN
 
 1. Mở đầu: Giới thiệu Kiến trúc (1 phút)
-(Thao tác: Mở VS Code, show cấu trúc thư mục server/)
+   (Thao tác: Mở VS Code, show cấu trúc thư mục server/)
 
 Lời nói: "Thưa thầy, thay vì viết code gộp, em đã xây dựng dự án theo mô hình MVC (Model-View-Controller) chuẩn công nghiệp và sử dụng MongoDB thật để lưu trữ dữ liệu.
 
@@ -9,9 +9,7 @@ Model (User.js): Định nghĩa cấu trúc User lưu trữ đồng thời 3 lo�
 
 Controller (hashController.js): Nơi chứa toàn bộ logic xử lý thuật toán và giả lập tấn công mà em sẽ demo ngay sau đây."
 
-
-Shutterstock
-2. Phần 1: Benchmark - Sự chênh lệch tốc độ (3 phút)
+Shutterstock 2. Phần 1: Benchmark - Sự chênh lệch tốc độ (3 phút)
 (Thao tác: Mở Web -> Nhập 123456 -> Bấm "Chạy & Lưu DB") (Thao tác: Khi biểu đồ hiện ra, chỉ chuột vào từng cột)
 
 Lời nói: "Đầu tiên, em thực hiện Benchmark quá trình tạo mật khẩu (Hashing).
@@ -22,30 +20,29 @@ Trong khi đó, Argon2 (cột xanh) mất khoảng 300ms - 400ms để tạo ra 
 
 (Thao tác: Mở Code hashController.js - Hàm benchmark)
 
+## // server/controllers/hashController.js
 
-// server/controllers/hashController.js
-----------------------------------------------------------------------------------
 // MD5: Dùng process.hrtime (đo nano giây) vì nó quá nhanh
 let start = process.hrtime();
 const md5Hash = crypto.createHash('md5').update(password).digest('hex');
 // ... Kết quả ra ngay lập tức
 
 // Argon2: Cấu hình Memory Hardness
-const argon2Hash = await argon2.hash(password, { 
-    type: argon2.argon2id, // Chống Side-channel attack
-    memoryCost: 2**16,     // Yêu cầu 64MB RAM cho mỗi lần băm
-    timeCost: 3,           // Bắt buộc CPU chạy 3 vòng lặp
-    parallelism: 1 
+const argon2Hash = await argon2.hash(password, {
+type: argon2.argon2id, // Chống Side-channel attack
+memoryCost: 2\*\*16, // Yêu cầu 64MB RAM cho mỗi lần băm
+timeCost: 3, // Bắt buộc CPU chạy 3 vòng lặp
+parallelism: 1
 });
-----------------------------------------------------------------------------------
 
+---
 
-Giải thích Code: "Ở đây, sự khác biệt nằm ở cấu hình memoryCost: 2**16 của Argon2. Em bắt buộc Server phải cấp phát 64MB RAM để tính toán xong 1 mật khẩu.
+Giải thích Code: "Ở đây, sự khác biệt nằm ở cấu hình memoryCost: 2\*\*16 của Argon2. Em bắt buộc Server phải cấp phát 64MB RAM để tính toán xong 1 mật khẩu.
 
 Điều này làm MD5 rất nhanh (tốt cho checksum file nhưng tệ cho mật khẩu) và Argon2 rất chậm (tốt cho bảo mật). Em đã lưu các hash này vào MongoDB để dùng cho bước tiếp theo."
 
 3. Phần 2: Giả lập Tấn công Brute-force (Phần quan trọng nhất - 5 phút)
-(Thao tác: Chuyển xuống phần "3. Mô phỏng Tấn công")
+   (Thao tác: Chuyển xuống phần "3. Mô phỏng Tấn công")
 
 Lời nói: "Thưa thầy, để chứng minh độ an toàn thực tế, em đã viết một module Attack Simulation. Kịch bản ở đây là: Hacker có danh sách 100 mật khẩu phổ biến và hắn thử liên tục vào hệ thống để dò tìm mật khẩu đúng."
 
@@ -68,33 +65,32 @@ Phân tích: "Kết quả: Để thử 100 mật khẩu, Argon2 mất tới 30.0
 
 JavaScript
 
-// server/controllers/hashController.js - Hàm attack
----------------------------------------------------------------------------------
+## // server/controllers/hashController.js - Hàm attack
+
 exports.attack = async (req, res) => {
-    // 1. Tạo danh sách 100 mật khẩu giả để tấn công
-    const attackList = Array.from({length: 100}, (_, i) => `wrong_pass_${i}`);
-    
+// 1. Tạo danh sách 100 mật khẩu giả để tấn công
+const attackList = Array.from({length: 100}, (_, i) => `wrong_pass_${i}`);
+
     let start = Date.now();
-    
+
     // 2. Vòng lặp tấn công (Brute-force Loop)
     for (const pass of attackList) {
         if (algo === 'MD5') {
             // MD5: Chỉ cần so sánh chuỗi hash (Cực nhanh)
             const h = crypto.createHash('md5').update(pass).digest('hex');
-            if (h === user.md5Hash) break; 
-        } 
+            if (h === user.md5Hash) break;
+        }
         else if (algo === 'Argon2') {
             // Argon2: Phải chạy hàm verify tốn tài nguyên (Cực lâu)
-            try { 
+            try {
                 // Hàm này tốn 300ms và 64MB RAM mỗi lần gọi
-                await argon2.verify(user.argon2Hash, pass); 
+                await argon2.verify(user.argon2Hash, pass);
             } catch(e){}
         }
     }
     // ... Trả về tổng thời gian
-};
----------------------------------------------------------------------------------
 
+## };
 
 Giải thích sâu với thầy: "Thưa thầy, bí mật nằm ở vòng lặp for này:
 
@@ -111,7 +107,7 @@ Argon2: 30 giây / 100 pass. => Hacker thử 1 tỷ pass mất ~10 năm.
 => Đây chính là lý do Argon2 id được gọi là Memory Hard Function (Hàm yêu cầu bộ nhớ), khắc tinh của GPU/ASIC Crack."
 
 4. Kết luận
-(Thao tác: Quay lại màn hình chính)
+   (Thao tác: Quay lại màn hình chính)
 
 Lời nói: "Tổng kết lại, Demo của em chứng minh rằng:
 
