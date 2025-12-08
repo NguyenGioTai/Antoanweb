@@ -63,7 +63,7 @@ const ResultTable = ({ data }) => {
 
   return (
     <Card>
-      <h3>3. Bảng chi tiết kỹ thuật</h3>
+      <h3>4. Bảng chi tiết kỹ thuật</h3>
       <Table>
         <thead>
           <tr>

@@ -52,25 +52,7 @@ exports.benchmark = async (req, res) => {
             parallelism: 'N/A',
         });
 
-        // --- 3. PBKDF2 ---
-        const pbkdf2Salt = crypto.randomBytes(16).toString('hex');
-        const pbkdf2Iterations = 100000;
-        start = process.hrtime();
-        const pbkdf2Hash = crypto.pbkdf2Sync(password, pbkdf2Salt, pbkdf2Iterations, 64, 'sha512').toString('hex');
-        end = process.hrtime(start);
-        results.push({
-            algo: 'PBKDF2',
-            status: 'An toàn',
-            hash: pbkdf2Hash,
-            time: (end[0] * 1000 + end[1] / 1e6),
-            salt: pbkdf2Salt,
-            iterations: pbkdf2Iterations,
-            memoryCost: 'N/A',
-            parallelism: 'N/A',
-        });
-
-
-        // --- 4. Bcrypt ---
+        // --- 3. Bcrypt ---
         const bcryptSaltRounds = 12;
         const startBcrypt = Date.now();
         const bcryptHash = await bcrypt.hash(password, bcryptSaltRounds);
@@ -85,7 +67,7 @@ exports.benchmark = async (req, res) => {
             parallelism: 'N/A',
         });
 
-        // --- 5. Argon2 ---
+        // --- 4. Argon2 ---
         const argonOptions = { 
             type: argon2.argon2id, 
             memoryCost: 2**16, 
@@ -112,7 +94,6 @@ exports.benchmark = async (req, res) => {
             username: 'admin', 
             md5Hash, 
             sha1Hash,
-            pbkdf2Hash: `${pbkdf2Salt}:${pbkdf2Hash}`, // Store salt with hash
             bcryptHash, 
             argon2Hash 
         });
@@ -149,11 +130,6 @@ exports.verify = async (req, res) => {
             const inputHash = crypto.createHash('sha1').update(password).digest('hex');
             isValid = (inputHash === user.sha1Hash);
         }
-        else if (algo === 'PBKDF2') {
-            const [salt, storedHash] = user.pbkdf2Hash.split(':');
-            const inputHash = crypto.pbkdf2Sync(password, salt, 100000, 64, 'sha512').toString('hex');
-            isValid = (inputHash === storedHash);
-        }
         else if (algo === 'Bcrypt') {
             isValid = await bcrypt.compare(password, user.bcryptHash);
         } 
@@ -177,45 +153,66 @@ exports.attack = async (req, res) => {
     try {
         const { algo } = req.body;
         const user = await User.findOne({ username: 'admin' });
-        console.log("🔍 Dữ liệu user khi bắt đầu attack:", user);
+        if (!user) {
+            console.log("Attack user not found");
+            return res.status(400).json({ msg: "Chưa có dữ liệu trong DB! Hãy chạy Benchmark trước." });
+        }
 
-        if (!user) return res.status(400).json({ msg: "Chưa có DB!" });
+        const attackList = Array.from({ length: 100 }, (_, i) => `wrong_password_${i}`);
+        const start = Date.now();
 
-        const attackList = Array.from({length: 100}, (_, i) => `wrong_password_${i}`);
-        
-        let start = Date.now();
-        
         for (const pass of attackList) {
             if (algo === 'MD5') {
                 const h = crypto.createHash('md5').update(pass).digest('hex');
-                if (h === user.md5Hash) break; 
+                if (h === user.md5Hash) break;
             } else if (algo === 'SHA-1') {
                 const h = crypto.createHash('sha1').update(pass).digest('hex');
                 if (h === user.sha1Hash) break;
-            } else if (algo === 'PBKDF2') {
-                const [salt, storedHash] = user.pbkdf2Hash.split(':');
-                const h = crypto.pbkdf2Sync(pass, salt, 100000, 64, 'sha512').toString('hex');
-                if (h === storedHash) break;
-            }
-            else if (algo === 'Bcrypt') {
+            } else if (algo === 'Bcrypt') {
                 await bcrypt.compare(pass, user.bcryptHash);
             } else if (algo === 'Argon2') {
-                try { await argon2.verify(user.argon2Hash, pass); } catch(e){}
+                try {
+                    await argon2.verify(user.argon2Hash, pass);
+                } catch (e) {
+                    // Verification fails by throwing an error, so we catch it and continue
+                }
             }
         }
 
-        let totalTime = Date.now() - start;
-        
-        console.log(`Đã tấn công ${algo} xong trong ${totalTime}ms`);
-        
-        res.json({ 
-            algo, 
-            attempts: 100, 
-            totalTime, 
-            avgTime: totalTime / 100 
+        const totalTime = Date.now() - start;
+        const hashesPerSecond = totalTime > 0 ? Math.round(attackList.length / (totalTime / 1000)) : Infinity;
+
+        // --- Detailed Crack Time Estimation ---
+        const dictionarySize = 1_000_000_000; // 1 billion
+        let timeToCrackSeconds = Infinity;
+        if (hashesPerSecond > 0) {
+            timeToCrackSeconds = dictionarySize / hashesPerSecond;
+        }
+
+        const formatTime = (seconds) => {
+            if (seconds === Infinity) return "Gần như tức thì";
+            if (seconds < 60) return `${seconds.toFixed(2)} giây`;
+            if (seconds < 3600) return `${(seconds / 60).toFixed(2)} phút`;
+            if (seconds < 86400) return `${(seconds / 3600).toFixed(2)} giờ`;
+            if (seconds < 31536000) return `${(seconds / 86400).toFixed(2)} ngày`;
+            return `${(seconds / 31536000).toFixed(2)} năm`;
+        };
+
+        const estimatedTime = formatTime(timeToCrackSeconds);
+
+        console.log(`Tấn công ${algo}: ${hashesPerSecond} hashes/giây. Ước tính thời gian crack: ${estimatedTime}`);
+
+        res.json({
+            algo,
+            attempts: attackList.length,
+            totalTime,
+            avgTime: totalTime / attackList.length,
+            hashesPerSecond: hashesPerSecond,
+            estimatedTimeToCrack: `~ ${estimatedTime} (với từ điển 1 tỉ mật khẩu)`,
         });
+
     } catch (error) {
-        console.error("Lỗi Attack:", error);
-        res.status(500).json({ msg: "Lỗi Attack" });
+        console.error(`Lỗi Attack (${algo}):`, error);
+        res.status(500).json({ msg: "Lỗi Server trong quá trình mô phỏng tấn công." });
     }
 };

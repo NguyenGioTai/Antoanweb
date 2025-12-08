@@ -7,10 +7,12 @@ export const useStore = create((set) => ({
   loading: false,
   attackResult: null,
   attacking: null,
+  verifyResult: null,
+  verifying: null,
   setPassword: (password) => set({ password }),
   handleBenchmark: async (password) => {
     if (!password) return alert('Nhập pass!');
-    set({ loading: true });
+    set({ loading: true, data: [], attackResult: null, verifyResult: null });
     try {
       const res = await axios.post('http://localhost:3000/api/benchmark', {
         password,
@@ -21,6 +23,18 @@ export const useStore = create((set) => ({
       alert('Lỗi Server!');
     } finally {
       set({ loading: false });
+    }
+  },
+  handleVerify: async (password, algo) => {
+    set({ verifying: algo, verifyResult: null });
+    try {
+        const res = await axios.post('http://localhost:3000/api/verify', { password, algo });
+        set({ verifyResult: res.data });
+    } catch (error) {
+        console.error("Lỗi Verify:", error);
+        alert('Lỗi khi xác thực!');
+    } finally {
+        set({ verifying: null });
     }
   },
   handleAttack: async (algo) => {
@@ -38,3 +52,4 @@ export const useStore = create((set) => ({
     }
   },
 }));
+

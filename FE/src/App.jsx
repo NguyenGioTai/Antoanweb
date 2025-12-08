@@ -5,6 +5,7 @@ import { useStore } from "./store";
 import styled from "styled-components";
 
 import BenchmarkSection from "./components/BenchmarkSection";
+import VerifySection from './components/VerifySection';
 import ResultTable from "./components/ResultTable";
 import AttackSection from "./components/AttackSection";
 import {
@@ -65,9 +66,12 @@ function App() {
     loading,
     attacking,
     attackResult,
+    verifyResult,
+    verifying,
     setPassword,
     handleBenchmark,
     handleAttack,
+    handleVerify,
   } = useStore();
 
   const chartData = {
@@ -104,8 +108,14 @@ function App() {
 
         {data.length > 0 && (
           <>
+            <VerifySection 
+              handleVerify={handleVerify}
+              verifyResult={verifyResult}
+              verifying={verifying}
+            />
+
             <Card>
-              <h3>2. Biểu đồ hiệu năng</h3>
+              <h3>3. Biểu đồ hiệu năng</h3>
               <div style={{ height: "300px" }}>
                 <Bar
                   data={chartData}
